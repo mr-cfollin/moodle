@@ -33,6 +33,8 @@ define('FORUM_MODE_FLATOLDEST', 1);
 define('FORUM_MODE_FLATNEWEST', -1);
 define('FORUM_MODE_THREADED', 2);
 define('FORUM_MODE_NESTED', 3);
+define('FORUM_MODE_RATINGHIGHEST', 4);
+define('FORUM_MODE_RATINGLOWEST', 5);
 
 define('FORUM_CHOOSESUBSCRIBE', 0);
 define('FORUM_FORCESUBSCRIBE', 1);
@@ -3935,13 +3937,27 @@ function forum_get_discussion_subscription_icon_preloaders() {
  * @param string $forumtype optional
  */
 function forum_print_mode_form($id, $mode, $forumtype='') {
-    global $OUTPUT;
+    global $OUTPUT, $DB;
+
+    // Get a list of forum layout modes, but do not include RATING modes if forum does not use ratings
+    // or if current user does not have capability to view other users' ratings.
+    $layoutmodes = forum_get_layout_modes_all();
+    $forumid = ($forumtype == 'single') ? $id : $DB->get_field('forum_discussions', 'forum', array('id' => $id));
+    $forum = $DB->get_record('forum', array('id' => $forumid));
+    $cm = get_coursemodule_from_instance('forum', $forumid);
+    if ($forum->assessed == 0 OR !has_capability('mod/forum:viewanyrating', context_module::instance($cm->id))) {
+        unset($layoutmodes[FORUM_MODE_RATINGHIGHEST]);
+        unset($layoutmodes[FORUM_MODE_RATINGLOWEST]);
+    }
+
     if ($forumtype == 'single') {
-        $select = new single_select(new moodle_url("/mod/forum/view.php", array('f'=>$id)), 'mode', forum_get_layout_modes(), $mode, null, "mode");
+        $select = new single_select(new moodle_url("/mod/forum/view.php", array('f'=>$id)), 'mode', $layoutmodes, $mode, null,
+            "mode");
         $select->set_label(get_string('displaymode', 'forum'), array('class' => 'accesshide'));
         $select->class = "forummode";
     } else {
-        $select = new single_select(new moodle_url("/mod/forum/discuss.php", array('d'=>$id)), 'mode', forum_get_layout_modes(), $mode, null, "mode");
+        $select = new single_select(new moodle_url("/mod/forum/discuss.php", array('d'=>$id)), 'mode', $layoutmodes, $mode, null,
+            "mode");
         $select->set_label(get_string('displaymode', 'forum'), array('class' => 'accesshide'));
     }
     echo $OUTPUT->render($select);
@@ -5586,6 +5602,8 @@ function forum_print_latest_discussions($course, $forum, $maxdiscussions = -1, $
  * @uses FORUM_MODE_FLATOLDEST
  * @uses FORUM_MODE_THREADED
  * @uses FORUM_MODE_NESTED
+ * @uses FORUM_MODE_RATINGHIGHEST
+ * @uses FORUM_MODE_RATINGLOWEST
  * @param stdClass $course
  * @param stdClass $cm
  * @param stdClass $forum
@@ -5662,8 +5680,17 @@ function forum_print_discussion($course, $cm, $forum, $discussion, $post, $mode,
 
         $rm = new rating_manager();
         $posts = $rm->get_ratings($ratingoptions);
-    }
 
+        // If the mode is sorting by rating, re-sort the array
+        if ($mode == FORUM_MODE_RATINGLOWEST) {
+            uasort($posts, create_function('$a, $b',
+                'return ($a->rating->aggregate < $b->rating->aggregate ? -1 : 1);'));
+        }
+        else if ($mode == FORUM_MODE_RATINGHIGHEST) {
+            uasort($posts, create_function('$a, $b',
+                'return ($a->rating->aggregate > $b->rating->aggregate ? -1 : 1);'));
+        }
+    }
 
     $post->forum = $forum->id;   // Add the forum id to the post object, later used by forum_print_post
     $post->forumtype = $forum->type;
@@ -5678,6 +5705,8 @@ function forum_print_discussion($course, $cm, $forum, $discussion, $post, $mode,
     switch ($mode) {
         case FORUM_MODE_FLATOLDEST :
         case FORUM_MODE_FLATNEWEST :
+        case FORUM_MODE_RATINGHIGHEST :
+        case FORUM_MODE_RATINGLOWEST :
         default:
             forum_print_posts_flat($course, $cm, $forum, $discussion, $post, $mode, $reply, $forumtracked, $posts);
             break;
@@ -7039,7 +7068,7 @@ function forum_reset_course_form_defaults($course) {
 }
 
 /**
- * Returns array of forum layout modes
+ * Returns array of forum layout modes available to all users
  *
  * @return array
  */
@@ -7048,6 +7077,20 @@ function forum_get_layout_modes() {
                   FORUM_MODE_FLATNEWEST => get_string('modeflatnewestfirst', 'forum'),
                   FORUM_MODE_THREADED   => get_string('modethreaded', 'forum'),
                   FORUM_MODE_NESTED     => get_string('modenested', 'forum'));
+}
+
+/**
+ * Returns array of all forum layout modes, including privileged modes
+ *
+ * @return array
+ */
+function forum_get_layout_modes_all() {
+    return array (FORUM_MODE_FLATOLDEST    => get_string('modeflatoldestfirst', 'forum'),
+                  FORUM_MODE_FLATNEWEST    => get_string('modeflatnewestfirst', 'forum'),
+                  FORUM_MODE_THREADED      => get_string('modethreaded', 'forum'),
+                  FORUM_MODE_NESTED        => get_string('modenested', 'forum'),
+                  FORUM_MODE_RATINGHIGHEST => get_string('moderatinghighestfirst', 'forum'),
+                  FORUM_MODE_RATINGLOWEST  => get_string('moderatinglowestfirst', 'forum'));
 }
 
 /**

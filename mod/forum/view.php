@@ -146,6 +146,11 @@
                 set_user_preference("forum_displaymode", $mode);
             }
             $displaymode = get_user_preferences("forum_displaymode", $CFG->forum_displaymode);
+            // Ensure user has capability to use current display mode for this context
+            if (($displaymode == FORUM_MODE_RATINGHIGHEST OR $displaymode == FORUM_MODE_RATINGLOWEST) AND
+                !has_capability('mod/forum:viewanyrating', $context)) {
+                $displaymode = $CFG->forum_displaymode;
+            }
             forum_print_mode_form($forum->id, $displaymode, $forum->type);
         }
     }
@@ -176,6 +181,12 @@
             $canreply    = forum_user_can_post($forum, $discussion, $USER, $cm, $course, $context);
             $canrate     = has_capability('mod/forum:rate', $context);
             $displaymode = get_user_preferences("forum_displaymode", $CFG->forum_displaymode);
+
+            // Ensure user has capability to use current display mode for this context
+            if (($displaymode == FORUM_MODE_RATINGHIGHEST OR $displaymode == FORUM_MODE_RATINGLOWEST) AND
+                !has_capability('mod/forum:viewanyrating', $context)) {
+                $displaymode = $CFG->forum_displaymode;
+            }
 
             echo '&nbsp;'; // this should fix the floating in FF
             forum_print_discussion($course, $cm, $forum, $discussion, $post, $displaymode, $canreply, $canrate);

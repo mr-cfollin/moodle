@@ -183,6 +183,12 @@ if ($mode) {
 
 $displaymode = get_user_preferences('forum_displaymode', $CFG->forum_displaymode);
 
+// Ensure user has capability to use current display mode for this context
+if (($displaymode == FORUM_MODE_RATINGHIGHEST OR $displaymode == FORUM_MODE_RATINGLOWEST) AND
+    !has_capability('mod/forum:viewanyrating', $modcontext)) {
+    $displaymode = $CFG->forum_displaymode;
+}
+
 if ($parent) {
     // If flat AND parent, then force nested display this time
     if ($displaymode == FORUM_MODE_FLATOLDEST or $displaymode == FORUM_MODE_FLATNEWEST) {
